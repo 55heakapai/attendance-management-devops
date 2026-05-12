@@ -1,0 +1,174 @@
+// ============================================================
+//  PHASE 1 — CI Build Pipeline (Jenkinsfile.ci)
+//  Triggered by GitHub Webhook on every push
+// ============================================================
+
+pipeline {
+    agent any
+
+    environment {
+        // ── AWS / ECR Configuration ───────────────────────────
+        AWS_REGION        = 'ap-south-1'                          // Mumbai
+        AWS_ACCOUNT_ID    = credentials('aws-account-id')         // Jenkins secret text
+        ECR_REPO_NAME     = 'attendance-system'
+        ECR_REGISTRY      = "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+        IMAGE_NAME        = "${ECR_REGISTRY}/${ECR_REPO_NAME}"
+        IMAGE_TAG         = "${BUILD_NUMBER}"
+
+        // ── Email / Notification ─────────────────────────────
+        NOTIFICATION_EMAIL = "your-email@example.com"
+    }
+
+    options {
+        buildDiscarder(logRotator(numToKeepStr: '10'))
+        timeout(time: 30, unit: 'MINUTES')
+        timestamps()
+    }
+
+    stages {
+
+        // ── Stage 1: Checkout ──────────────────────────────────
+        stage('Checkout') {
+            steps {
+                echo "📥 Checking out source code from GitHub..."
+                checkout scm
+                script {
+                    env.GIT_COMMIT_MSG = sh(
+                        script: 'git log -1 --pretty=%B',
+                        returnStdout: true
+                    ).trim()
+                    env.GIT_AUTHOR = sh(
+                        script: 'git log -1 --pretty=%an',
+                        returnStdout: true
+                    ).trim()
+                    env.GIT_COMMIT_SHA = sh(
+                        script: 'git rev-parse --short HEAD',
+                        returnStdout: true
+                    ).trim()
+                    echo "Commit: ${env.GIT_COMMIT_SHA} by ${env.GIT_AUTHOR}"
+                    echo "Message: ${env.GIT_COMMIT_MSG}"
+                }
+            }
+        }
+
+        // ── Stage 2: Test ──────────────────────────────────────
+        stage('Test') {
+            steps {
+                echo "🧪 Running Maven tests..."
+                sh 'mvn test -B'
+            }
+            post {
+                always {
+                    junit 'target/surefire-reports/*.xml'
+                }
+            }
+        }
+
+        // ── Stage 3: Build JAR ─────────────────────────────────
+        stage('Build JAR') {
+            steps {
+                echo "🔨 Building Spring Boot JAR..."
+                sh 'mvn clean package -DskipTests -B'
+                archiveArtifacts artifacts: 'target/*.jar', fingerprint: true
+            }
+        }
+
+        // ── Stage 4: Docker Build ──────────────────────────────
+        stage('Docker Build') {
+            steps {
+                echo "🐳 Building Docker image: ${IMAGE_NAME}:${IMAGE_TAG}"
+                sh """
+                    docker build \
+                        --build-arg BUILD_NUMBER=${BUILD_NUMBER} \
+                        --label "git-commit=${env.GIT_COMMIT_SHA}" \
+                        --label "build-date=\$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+                        -t ${IMAGE_NAME}:${IMAGE_TAG} \
+                        -t ${IMAGE_NAME}:latest \
+                        .
+                """
+            }
+        }
+
+        // ── Stage 5: AWS ECR Login & Push ──────────────────────
+        stage('Push to ECR') {
+            steps {
+                withCredentials([
+                    [
+                        $class: 'AmazonWebServicesCredentialsBinding',
+                        credentialsId: 'aws-credentials',
+                        accessKeyVariable: 'AWS_ACCESS_KEY_ID',
+                        secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
+                    ]
+                ]) {
+                    echo "🔐 Logging into Amazon ECR..."
+                    sh """
+                        aws ecr get-login-password \
+                            --region ${AWS_REGION} | \
+                        docker login \
+                            --username AWS \
+                            --password-stdin ${ECR_REGISTRY}
+                    """
+
+                    echo "📤 Pushing image ${IMAGE_NAME}:${IMAGE_TAG} to ECR..."
+                    sh "docker push ${IMAGE_NAME}:${IMAGE_TAG}"
+                    sh "docker push ${IMAGE_NAME}:latest"
+
+                    echo "🧹 Cleaning up local images..."
+                    sh "docker rmi ${IMAGE_NAME}:${IMAGE_TAG} || true"
+                    sh "docker rmi ${IMAGE_NAME}:latest || true"
+                }
+            }
+        }
+    }
+
+    // ── Post-build Notifications ───────────────────────────────
+    post {
+        success {
+            echo "✅ Build #${BUILD_NUMBER} succeeded!"
+            emailext(
+                to: "${NOTIFICATION_EMAIL}",
+                subject: "✅ [SUCCESS] Attendance CI Build #${BUILD_NUMBER}",
+                body: """
+                    <html><body style="font-family: Arial, sans-serif;">
+                    <h2 style="color:#27ae60;">✅ Build Successful</h2>
+                    <table border="1" cellpadding="8" cellspacing="0" style="border-collapse:collapse;">
+                        <tr><td><b>Job</b></td><td>${JOB_NAME}</td></tr>
+                        <tr><td><b>Build #</b></td><td>${BUILD_NUMBER}</td></tr>
+                        <tr><td><b>Git Commit</b></td><td>${env.GIT_COMMIT_SHA}</td></tr>
+                        <tr><td><b>Author</b></td><td>${env.GIT_AUTHOR}</td></tr>
+                        <tr><td><b>Message</b></td><td>${env.GIT_COMMIT_MSG}</td></tr>
+                        <tr><td><b>ECR Image</b></td><td>${IMAGE_NAME}:${IMAGE_TAG}</td></tr>
+                        <tr><td><b>Duration</b></td><td>${currentBuild.durationString}</td></tr>
+                    </table>
+                    <p><a href="${BUILD_URL}">View Build Logs →</a></p>
+                    </body></html>
+                """,
+                mimeType: 'text/html'
+            )
+        }
+        failure {
+            echo "❌ Build #${BUILD_NUMBER} failed!"
+            emailext(
+                to: "${NOTIFICATION_EMAIL}",
+                subject: "❌ [FAILED] Attendance CI Build #${BUILD_NUMBER}",
+                body: """
+                    <html><body style="font-family: Arial, sans-serif;">
+                    <h2 style="color:#e74c3c;">❌ Build Failed</h2>
+                    <table border="1" cellpadding="8" cellspacing="0" style="border-collapse:collapse;">
+                        <tr><td><b>Job</b></td><td>${JOB_NAME}</td></tr>
+                        <tr><td><b>Build #</b></td><td>${BUILD_NUMBER}</td></tr>
+                        <tr><td><b>Git Commit</b></td><td>${env.GIT_COMMIT_SHA}</td></tr>
+                        <tr><td><b>Author</b></td><td>${env.GIT_AUTHOR}</td></tr>
+                        <tr><td><b>Duration</b></td><td>${currentBuild.durationString}</td></tr>
+                    </table>
+                    <p><a href="${BUILD_URL}console">View Console Output →</a></p>
+                    </body></html>
+                """,
+                mimeType: 'text/html'
+            )
+        }
+        always {
+            cleanWs()
+        }
+    }
+}

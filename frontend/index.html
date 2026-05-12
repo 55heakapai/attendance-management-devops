@@ -1,0 +1,969 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AttendX — Attendance Management System</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #0a0c10;
+    --bg2: #111318;
+    --bg3: #1a1d24;
+    --card: #15181f;
+    --border: rgba(255,255,255,0.07);
+    --border2: rgba(255,255,255,0.12);
+    --accent: #00e5a0;
+    --accent2: #7c3aed;
+    --accent3: #f59e0b;
+    --danger: #ef4444;
+    --text: #f0f2f7;
+    --muted: #6b7280;
+    --muted2: #9ca3af;
+    --font-head: 'Syne', sans-serif;
+    --font-body: 'DM Sans', sans-serif;
+    --font-mono: 'DM Mono', monospace;
+    --r: 12px;
+    --r2: 20px;
+  }
+  html { scroll-behavior: smooth; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-body);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* ── GRID NOISE BACKGROUND ── */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(0,229,160,0.02) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,229,160,0.02) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* ── GLOW ORBS ── */
+  .orb {
+    position: fixed;
+    border-radius: 50%;
+    filter: blur(80px);
+    opacity: 0.12;
+    pointer-events: none;
+    z-index: 0;
+  }
+  .orb1 { width: 500px; height: 500px; background: var(--accent); top: -150px; right: -100px; }
+  .orb2 { width: 400px; height: 400px; background: var(--accent2); bottom: 0; left: -100px; }
+
+  /* ── LAYOUT ── */
+  .shell {
+    position: relative;
+    z-index: 1;
+    display: grid;
+    grid-template-columns: 260px 1fr;
+    min-height: 100vh;
+  }
+
+  /* ── SIDEBAR ── */
+  .sidebar {
+    background: var(--bg2);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    padding: 2rem 1.5rem;
+    position: sticky;
+    top: 0;
+    height: 100vh;
+  }
+  .logo {
+    font-family: var(--font-head);
+    font-size: 1.5rem;
+    font-weight: 800;
+    letter-spacing: -0.03em;
+    margin-bottom: 0.25rem;
+  }
+  .logo span { color: var(--accent); }
+  .logo-sub {
+    font-size: 0.7rem;
+    color: var(--muted);
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    font-family: var(--font-mono);
+    margin-bottom: 2.5rem;
+    padding-bottom: 2rem;
+    border-bottom: 1px solid var(--border);
+  }
+  .nav-label {
+    font-size: 0.65rem;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 0.5rem;
+    font-family: var(--font-mono);
+  }
+  .nav-item {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.65rem 0.875rem;
+    border-radius: var(--r);
+    cursor: pointer;
+    font-size: 0.9rem;
+    font-weight: 400;
+    color: var(--muted2);
+    transition: all 0.15s;
+    margin-bottom: 0.25rem;
+    border: 1px solid transparent;
+    text-decoration: none;
+  }
+  .nav-item:hover { background: var(--bg3); color: var(--text); border-color: var(--border); }
+  .nav-item.active { background: rgba(0,229,160,0.08); color: var(--accent); border-color: rgba(0,229,160,0.2); }
+  .nav-icon { width: 18px; height: 18px; flex-shrink: 0; }
+  .nav-spacer { flex: 1; }
+  .sidebar-status {
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: var(--r);
+    padding: 0.875rem 1rem;
+    font-size: 0.8rem;
+  }
+  .ss-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.4rem; }
+  .ss-row:last-child { margin-bottom: 0; }
+  .ss-label { color: var(--muted); }
+  .ss-val { font-family: var(--font-mono); font-size: 0.75rem; }
+  .pill {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 2px 8px; border-radius: 100px;
+    font-size: 0.7rem; font-family: var(--font-mono);
+  }
+  .pill.green { background: rgba(0,229,160,0.1); color: var(--accent); }
+  .pill.amber { background: rgba(245,158,11,0.1); color: var(--accent3); }
+  .pill.red { background: rgba(239,68,68,0.1); color: var(--danger); }
+  .pulse {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: currentColor;
+    animation: pulse 2s infinite;
+  }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+  /* ── MAIN ── */
+  .main {
+    padding: 2rem 2.5rem;
+    overflow-y: auto;
+  }
+  .page-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 2rem;
+  }
+  .page-title {
+    font-family: var(--font-head);
+    font-size: 1.8rem;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+  }
+  .page-date {
+    font-size: 0.8rem;
+    color: var(--muted);
+    font-family: var(--font-mono);
+    margin-top: 0.25rem;
+  }
+  .btn {
+    display: inline-flex; align-items: center; gap: 0.5rem;
+    padding: 0.6rem 1.25rem;
+    border-radius: var(--r);
+    border: none; cursor: pointer;
+    font-size: 0.85rem; font-family: var(--font-body); font-weight: 500;
+    transition: all 0.15s;
+  }
+  .btn-primary { background: var(--accent); color: #000; }
+  .btn-primary:hover { background: #00c98a; transform: translateY(-1px); }
+  .btn-ghost { background: var(--bg3); color: var(--text); border: 1px solid var(--border2); }
+  .btn-ghost:hover { border-color: var(--accent); color: var(--accent); }
+
+  /* ── STATS GRID ── */
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-bottom: 1.5rem; }
+  .stat-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--r2);
+    padding: 1.25rem 1.5rem;
+    position: relative;
+    overflow: hidden;
+    transition: border-color 0.2s;
+  }
+  .stat-card:hover { border-color: var(--border2); }
+  .stat-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: var(--accent-c, var(--accent));
+    opacity: 0.6;
+  }
+  .stat-card.amber { --accent-c: var(--accent3); }
+  .stat-card.purple { --accent-c: var(--accent2); }
+  .stat-card.red { --accent-c: var(--danger); }
+  .stat-label { font-size: 0.75rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 0.75rem; }
+  .stat-num { font-family: var(--font-head); font-size: 2rem; font-weight: 700; letter-spacing: -0.02em; }
+  .stat-sub { font-size: 0.75rem; color: var(--muted2); margin-top: 0.25rem; }
+  .stat-icon {
+    position: absolute; top: 1rem; right: 1rem;
+    width: 36px; height: 36px; border-radius: 8px;
+    background: rgba(255,255,255,0.04);
+    display: flex; align-items: center; justify-content: center;
+  }
+
+  /* ── TWO COL ── */
+  .two-col { display: grid; grid-template-columns: 1fr 360px; gap: 1rem; margin-bottom: 1.5rem; }
+
+  /* ── CARD ── */
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--r2);
+    overflow: hidden;
+  }
+  .card-head {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 1.25rem 1.5rem;
+    border-bottom: 1px solid var(--border);
+  }
+  .card-title { font-family: var(--font-head); font-size: 1rem; font-weight: 600; }
+  .card-body { padding: 1.5rem; }
+
+  /* ── PIPELINE VIS ── */
+  .pipeline { display: flex; align-items: center; gap: 0; padding: 1.5rem; }
+  .pipe-step {
+    flex: 1;
+    position: relative;
+    text-align: center;
+  }
+  .pipe-step:not(:last-child)::after {
+    content: '';
+    position: absolute;
+    top: 20px; left: 50%; right: -50%;
+    height: 2px;
+    background: var(--border2);
+    z-index: 0;
+  }
+  .pipe-step.done::after { background: var(--accent); }
+  .pipe-step.running::after { background: linear-gradient(90deg, var(--accent) 60%, var(--border2) 100%); }
+  .pipe-dot {
+    width: 40px; height: 40px; border-radius: 50%;
+    background: var(--bg3);
+    border: 2px solid var(--border2);
+    display: flex; align-items: center; justify-content: center;
+    margin: 0 auto 0.75rem;
+    position: relative; z-index: 1;
+    transition: all 0.3s;
+  }
+  .pipe-step.done .pipe-dot { background: rgba(0,229,160,0.15); border-color: var(--accent); }
+  .pipe-step.running .pipe-dot {
+    background: rgba(245,158,11,0.15);
+    border-color: var(--accent3);
+    animation: spin-pulse 1.5s infinite;
+  }
+  @keyframes spin-pulse { 0%,100%{box-shadow:0 0 0 0 rgba(245,158,11,0.4)} 50%{box-shadow:0 0 0 8px rgba(245,158,11,0)} }
+  .pipe-name { font-size: 0.75rem; color: var(--muted2); }
+  .pipe-step.done .pipe-name { color: var(--accent); }
+
+  /* ── TABLE ── */
+  table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+  thead th {
+    text-align: left;
+    padding: 0.75rem 1rem;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--muted);
+    font-family: var(--font-mono);
+    border-bottom: 1px solid var(--border);
+    font-weight: 400;
+  }
+  tbody td {
+    padding: 0.875rem 1rem;
+    border-bottom: 1px solid var(--border);
+    color: var(--muted2);
+    vertical-align: middle;
+  }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr:hover td { background: rgba(255,255,255,0.02); }
+  .td-name { color: var(--text); font-weight: 500; }
+  .td-mono { font-family: var(--font-mono); font-size: 0.78rem; }
+  .avatar {
+    width: 32px; height: 32px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.7rem; font-weight: 600; color: #000;
+    flex-shrink: 0;
+  }
+  .av-row { display: flex; align-items: center; gap: 0.75rem; }
+
+  /* ── CHECK IN FORM ── */
+  .form-group { margin-bottom: 1rem; }
+  .form-label { font-size: 0.75rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.1em; display: block; margin-bottom: 0.4rem; font-family: var(--font-mono); }
+  .form-input {
+    width: 100%;
+    background: var(--bg3);
+    border: 1px solid var(--border2);
+    border-radius: var(--r);
+    padding: 0.65rem 0.875rem;
+    color: var(--text);
+    font-family: var(--font-body);
+    font-size: 0.875rem;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+  .form-input:focus { border-color: var(--accent); }
+  .form-input::placeholder { color: var(--muted); }
+
+  /* ── ACTIVITY FEED ── */
+  .activity-item {
+    display: flex; gap: 0.875rem; align-items: flex-start;
+    padding: 0.875rem 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .activity-item:last-child { border-bottom: none; }
+  .act-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--accent); margin-top: 5px; flex-shrink: 0;
+  }
+  .act-dot.amber { background: var(--accent3); }
+  .act-dot.red { background: var(--danger); }
+  .act-text { font-size: 0.83rem; color: var(--muted2); line-height: 1.5; }
+  .act-text strong { color: var(--text); font-weight: 500; }
+  .act-time { font-size: 0.7rem; color: var(--muted); font-family: var(--font-mono); margin-top: 0.2rem; }
+
+  /* ── BOTTOM GRID ── */
+  .three-col { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1rem; }
+
+  /* ── ECR INFO ── */
+  .ecr-tag {
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 0.65rem 0.875rem;
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 0.5rem;
+  }
+  .ecr-tag-name { font-family: var(--font-mono); font-size: 0.78rem; color: var(--accent); }
+  .ecr-tag-meta { font-size: 0.72rem; color: var(--muted); }
+
+  /* ── NOTIFICATION ── */
+  .notif {
+    position: fixed; bottom: 1.5rem; right: 1.5rem;
+    background: var(--bg2); border: 1px solid var(--accent);
+    border-radius: var(--r2); padding: 1rem 1.25rem;
+    max-width: 300px; z-index: 100;
+    transform: translateY(200%);
+    transition: transform 0.4s cubic-bezier(0.34,1.56,0.64,1);
+    font-size: 0.85rem;
+  }
+  .notif.show { transform: translateY(0); }
+  .notif-title { font-weight: 600; color: var(--accent); margin-bottom: 0.25rem; }
+  .notif-body { color: var(--muted2); font-size: 0.8rem; }
+
+  /* ── RESPONSIVE ── */
+  @media (max-width: 1200px) {
+    .stats { grid-template-columns: repeat(2, 1fr); }
+    .two-col { grid-template-columns: 1fr; }
+    .three-col { grid-template-columns: 1fr; }
+  }
+  @media (max-width: 768px) {
+    .shell { grid-template-columns: 1fr; }
+    .sidebar { display: none; }
+    .main { padding: 1rem; }
+    .stats { grid-template-columns: repeat(2, 1fr); }
+  }
+
+  /* ── ANIMATIONS ── */
+  @keyframes fadeUp { from { opacity:0; transform:translateY(16px); } to { opacity:1; transform:translateY(0); } }
+  .stat-card { animation: fadeUp 0.4s ease both; }
+  .stat-card:nth-child(1){animation-delay:.05s}
+  .stat-card:nth-child(2){animation-delay:.1s}
+  .stat-card:nth-child(3){animation-delay:.15s}
+  .stat-card:nth-child(4){animation-delay:.2s}
+</style>
+</head>
+<body>
+
+<div class="orb orb1"></div>
+<div class="orb orb2"></div>
+
+<div class="shell">
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+    <div class="logo">Attend<span>X</span></div>
+    <div class="logo-sub">CI/CD Ecosystem · v2.4.1</div>
+
+    <div class="nav-label">Navigation</div>
+
+    <a class="nav-item active" href="#">
+      <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6zm0 9.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 18v-2.25zm9.75-9.75A2.25 2.25 0 0115.75 3.75H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25a2.25 2.25 0 01-2.25-2.25V6zm0 9.75a2.25 2.25 0 012.25-2.25H18a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 0118 20.25h-2.25A2.25 2.25 0 0113.5 18v-2.25z"/>
+      </svg>
+      Dashboard
+    </a>
+    <a class="nav-item" href="#">
+      <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M17.25 6.75L22.5 12l-5.25 5.25m-10.5 0L1.5 12l5.25-5.25m7.5-3l-4.5 16.5"/>
+      </svg>
+      Pipelines
+    </a>
+    <a class="nav-item" href="#">
+      <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M18 18.72a9.094 9.094 0 003.741-.479 3 3 0 00-4.682-2.72m.94 3.198l.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0112 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 016 18.719m12 0a5.971 5.971 0 00-.941-3.197m0 0A5.995 5.995 0 0012 12.75a5.995 5.995 0 00-5.058 2.772m0 0a3 3 0 00-4.681 2.72 8.986 8.986 0 003.74.477m.94-3.197a5.971 5.971 0 00-.94 3.197M15 6.75a3 3 0 11-6 0 3 3 0 016 0zm6 3a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0zm-13.5 0a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0z"/>
+      </svg>
+      Employees
+    </a>
+    <a class="nav-item" href="#">
+      <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 15a4.5 4.5 0 004.5 4.5H18a3.75 3.75 0 001.332-7.257 3 3 0 00-3.758-3.848 5.25 5.25 0 00-10.233 2.33A4.502 4.502 0 002.25 15z"/>
+      </svg>
+      AWS / ECR
+    </a>
+    <a class="nav-item" href="#">
+      <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M9 17.25v1.007a3 3 0 01-.879 2.122L7.5 21h9l-.621-.621A3 3 0 0115 18.257V17.25m6-12V15a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 15V5.25m18 0A2.25 2.25 0 0018.75 3H5.25A2.25 2.25 0 003 5.25m18 0H3"/>
+      </svg>
+      EC2 Instances
+    </a>
+    <a class="nav-item" href="#">
+      <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M10.5 6a7.5 7.5 0 107.5 7.5h-7.5V6z"/><path stroke-linecap="round" stroke-linejoin="round" d="M13.5 10.5H21A7.5 7.5 0 0013.5 3v7.5z"/>
+      </svg>
+      Reports
+    </a>
+
+    <div class="nav-spacer"></div>
+
+    <div class="sidebar-status">
+      <div class="ss-row">
+        <span class="ss-label">API Status</span>
+        <span class="pill green"><span class="pulse"></span>Live</span>
+      </div>
+      <div class="ss-row">
+        <span class="ss-label">ALB Status</span>
+        <span class="pill green"><span class="pulse"></span>Healthy</span>
+      </div>
+      <div class="ss-row">
+        <span class="ss-label">EC2 Nodes</span>
+        <span class="ss-val">2 / 2 ✓</span>
+      </div>
+      <div class="ss-row">
+        <span class="ss-label">ECR Images</span>
+        <span class="ss-val">7 tags</span>
+      </div>
+    </div>
+  </aside>
+
+  <!-- MAIN CONTENT -->
+  <main class="main">
+
+    <!-- PAGE HEADER -->
+    <div class="page-head">
+      <div>
+        <h1 class="page-title">Operations Dashboard</h1>
+        <div class="page-date" id="live-date">—</div>
+      </div>
+      <div style="display:flex;gap:0.75rem;align-items:center;">
+        <button class="btn btn-ghost" onclick="refreshStatus()">
+          <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99"/>
+          </svg>
+          Refresh
+        </button>
+        <button class="btn btn-primary" onclick="openCheckin()">
+          <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15"/>
+          </svg>
+          Check In
+        </button>
+      </div>
+    </div>
+
+    <!-- STATS -->
+    <div class="stats">
+      <div class="stat-card">
+        <div class="stat-label">Total Check-ins Today</div>
+        <div class="stat-num" id="stat-total">247</div>
+        <div class="stat-sub">↑ 12% from yesterday</div>
+        <div class="stat-icon">
+          <svg width="18" height="18" fill="none" stroke="var(--accent)" viewBox="0 0 24 24" stroke-width="1.5">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+          </svg>
+        </div>
+      </div>
+      <div class="stat-card amber">
+        <div class="stat-label">Currently Present</div>
+        <div class="stat-num" id="stat-present">183</div>
+        <div class="stat-sub">74% attendance rate</div>
+        <div class="stat-icon">
+          <svg width="18" height="18" fill="none" stroke="var(--accent3)" viewBox="0 0 24 24" stroke-width="1.5">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z"/>
+          </svg>
+        </div>
+      </div>
+      <div class="stat-card purple">
+        <div class="stat-label">Pipeline Builds</div>
+        <div class="stat-num" id="stat-builds">42</div>
+        <div class="stat-sub">Latest: Build #42 ✓</div>
+        <div class="stat-icon">
+          <svg width="18" height="18" fill="none" stroke="var(--accent2)" viewBox="0 0 24 24" stroke-width="1.5">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.324.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.247a1.125 1.125 0 01-.26 1.431l-1.003.827c-.293.24-.438.613-.431.992a6.759 6.759 0 010 .255c-.007.378.138.75.43.99l1.005.828c.424.35.534.954.26 1.43l-1.298 2.247a1.125 1.125 0 01-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.57 6.57 0 01-.22.128c-.331.183-.581.495-.644.869l-.213 1.28c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.02-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 01-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 01-1.369-.49l-1.297-2.247a1.125 1.125 0 01.26-1.431l1.004-.827c.292-.24.437-.613.43-.992a6.932 6.932 0 010-.255c.007-.378-.138-.75-.43-.99l-1.004-.828a1.125 1.125 0 01-.26-1.43l1.297-2.247a1.125 1.125 0 011.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.281z"/>
+            <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+          </svg>
+        </div>
+      </div>
+      <div class="stat-card red">
+        <div class="stat-label">Absent Today</div>
+        <div class="stat-num" id="stat-absent">64</div>
+        <div class="stat-sub">26% — 4 on leave</div>
+        <div class="stat-icon">
+          <svg width="18" height="18" fill="none" stroke="var(--danger)" viewBox="0 0 24 24" stroke-width="1.5">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"/>
+          </svg>
+        </div>
+      </div>
+    </div>
+
+    <!-- TWO COL: PIPELINE + CHECKIN FORM -->
+    <div class="two-col">
+
+      <!-- CI/CD PIPELINE STATUS -->
+      <div class="card">
+        <div class="card-head">
+          <span class="card-title">CI/CD Pipeline Status</span>
+          <span class="pill amber"><span class="pulse"></span>Build #42 Running</span>
+        </div>
+
+        <div class="pipeline" id="pipeline-vis">
+          <div class="pipe-step done">
+            <div class="pipe-dot">
+              <svg width="16" height="16" fill="none" stroke="var(--accent)" viewBox="0 0 24 24" stroke-width="2.5">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5"/>
+              </svg>
+            </div>
+            <div class="pipe-name">Checkout</div>
+          </div>
+          <div class="pipe-step done">
+            <div class="pipe-dot">
+              <svg width="16" height="16" fill="none" stroke="var(--accent)" viewBox="0 0 24 24" stroke-width="2.5">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5"/>
+              </svg>
+            </div>
+            <div class="pipe-name">mvn test</div>
+          </div>
+          <div class="pipe-step done">
+            <div class="pipe-dot">
+              <svg width="16" height="16" fill="none" stroke="var(--accent)" viewBox="0 0 24 24" stroke-width="2.5">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5"/>
+              </svg>
+            </div>
+            <div class="pipe-name">mvn package</div>
+          </div>
+          <div class="pipe-step running">
+            <div class="pipe-dot">
+              <svg width="16" height="16" fill="none" stroke="var(--accent3)" viewBox="0 0 24 24" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M21 7.5l-9-5.25L3 7.5m18 0l-9 5.25m9-5.25v9l-9 5.25M3 7.5l9 5.25M3 7.5v9l9 5.25m0-9v9"/>
+              </svg>
+            </div>
+            <div class="pipe-name">Docker Build</div>
+          </div>
+          <div class="pipe-step">
+            <div class="pipe-dot">
+              <svg width="16" height="16" fill="none" stroke="var(--muted)" viewBox="0 0 24 24" stroke-width="1.5">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 15a4.5 4.5 0 004.5 4.5H18a3.75 3.75 0 001.332-7.257 3 3 0 00-3.758-3.848 5.25 5.25 0 00-10.233 2.33A4.502 4.502 0 002.25 15z"/>
+              </svg>
+            </div>
+            <div class="pipe-name">Push ECR</div>
+          </div>
+          <div class="pipe-step">
+            <div class="pipe-dot">
+              <svg width="16" height="16" fill="none" stroke="var(--muted)" viewBox="0 0 24 24" stroke-width="1.5">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M9 17.25v1.007a3 3 0 01-.879 2.122L7.5 21h9l-.621-.621A3 3 0 0115 18.257V17.25m6-12V15a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 15V5.25m18 0A2.25 2.25 0 0018.75 3H5.25A2.25 2.25 0 003 5.25m18 0H3"/>
+              </svg>
+            </div>
+            <div class="pipe-name">Deploy EC2</div>
+          </div>
+        </div>
+
+        <!-- RECENT BUILDS TABLE -->
+        <div style="border-top:1px solid var(--border)">
+          <table>
+            <thead>
+              <tr>
+                <th>Build</th>
+                <th>Branch</th>
+                <th>Commit</th>
+                <th>Duration</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody id="builds-table">
+              <tr>
+                <td class="td-mono">#42</td>
+                <td class="td-mono">main</td>
+                <td class="td-mono">a3f9c21</td>
+                <td>2m 14s</td>
+                <td><span class="pill amber"><span class="pulse"></span>Running</span></td>
+              </tr>
+              <tr>
+                <td class="td-mono">#41</td>
+                <td class="td-mono">main</td>
+                <td class="td-mono">8b2d4e7</td>
+                <td>3m 02s</td>
+                <td><span class="pill green">✓ Passed</span></td>
+              </tr>
+              <tr>
+                <td class="td-mono">#40</td>
+                <td class="td-mono">feature/ha</td>
+                <td class="td-mono">c91a55f</td>
+                <td>1m 48s</td>
+                <td><span class="pill green">✓ Passed</span></td>
+              </tr>
+              <tr>
+                <td class="td-mono">#39</td>
+                <td class="td-mono">main</td>
+                <td class="td-mono">ff02d1b</td>
+                <td>4m 21s</td>
+                <td><span class="pill red">✗ Failed</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- CHECK IN PANEL -->
+      <div style="display:flex;flex-direction:column;gap:1rem;">
+        <div class="card" id="checkin-card">
+          <div class="card-head">
+            <span class="card-title">Quick Check-in</span>
+            <span class="pill green"><span class="pulse"></span>API UP</span>
+          </div>
+          <div class="card-body">
+            <div class="form-group">
+              <label class="form-label">Employee ID</label>
+              <input class="form-input" id="ci-uid" placeholder="e.g. EMP001" />
+            </div>
+            <div class="form-group">
+              <label class="form-label">Full Name</label>
+              <input class="form-input" id="ci-name" placeholder="e.g. Hea Sharma" />
+            </div>
+            <div class="form-group">
+              <label class="form-label">Location</label>
+              <input class="form-input" id="ci-location" placeholder="e.g. IIT Bombay Lab 3" />
+            </div>
+            <button class="btn btn-primary" style="width:100%;justify-content:center;margin-top:0.5rem" onclick="doCheckin()">
+              Submit Check-in →
+            </button>
+            <div id="ci-result" style="margin-top:0.75rem;display:none;"></div>
+          </div>
+        </div>
+
+        <!-- ACTIVITY FEED -->
+        <div class="card">
+          <div class="card-head"><span class="card-title">Activity Feed</span></div>
+          <div class="card-body" style="padding:0 1.5rem;" id="activity-feed">
+            <div class="activity-item">
+              <div class="act-dot"></div>
+              <div>
+                <div class="act-text"><strong>Priya Sharma</strong> checked in from <strong>Lab 2</strong></div>
+                <div class="act-time">2 minutes ago</div>
+              </div>
+            </div>
+            <div class="activity-item">
+              <div class="act-dot amber"></div>
+              <div>
+                <div class="act-text">Build <strong>#42</strong> started — <strong>docker build</strong> in progress</div>
+                <div class="act-time">5 minutes ago</div>
+              </div>
+            </div>
+            <div class="activity-item">
+              <div class="act-dot"></div>
+              <div>
+                <div class="act-text"><strong>Rahul Menon</strong> checked in from <strong>Office B</strong></div>
+                <div class="act-time">11 minutes ago</div>
+              </div>
+            </div>
+            <div class="activity-item">
+              <div class="act-dot"></div>
+              <div>
+                <div class="act-text">Build <strong>#41</strong> deployed to <strong>Production</strong> — both EC2s healthy</div>
+                <div class="act-time">18 minutes ago</div>
+              </div>
+            </div>
+            <div class="activity-item">
+              <div class="act-dot red"></div>
+              <div>
+                <div class="act-text">Build <strong>#39</strong> failed — mvn test: 2 failures</div>
+                <div class="act-time">1 hour ago</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- BOTTOM: ATTENDANCE + ECR -->
+    <div class="two-col" style="margin-top:1rem;">
+
+      <!-- ATTENDANCE TABLE -->
+      <div class="card">
+        <div class="card-head">
+          <span class="card-title">Today's Attendance</span>
+          <button class="btn btn-ghost" style="padding:0.4rem 0.875rem;font-size:0.78rem;">Export CSV</button>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>Employee</th>
+              <th>ID</th>
+              <th>Time</th>
+              <th>Location</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody id="attendance-rows">
+            <tr>
+              <td><div class="av-row"><div class="avatar" style="background:var(--accent)">PS</div><span class="td-name">Priya Sharma</span></div></td>
+              <td class="td-mono">EMP042</td>
+              <td class="td-mono">09:02</td>
+              <td>Lab 2</td>
+              <td><span class="pill green">Present</span></td>
+            </tr>
+            <tr>
+              <td><div class="av-row"><div class="avatar" style="background:#7c3aed">RM</div><span class="td-name">Rahul Menon</span></div></td>
+              <td class="td-mono">EMP017</td>
+              <td class="td-mono">09:15</td>
+              <td>Office B</td>
+              <td><span class="pill green">Present</span></td>
+            </tr>
+            <tr>
+              <td><div class="av-row"><div class="avatar" style="background:#f59e0b">AK</div><span class="td-name">Ananya Kulkarni</span></div></td>
+              <td class="td-mono">EMP008</td>
+              <td class="td-mono">09:31</td>
+              <td>Remote</td>
+              <td><span class="pill green">Present</span></td>
+            </tr>
+            <tr>
+              <td><div class="av-row"><div class="avatar" style="background:#ef4444">VR</div><span class="td-name">Vivek Rao</span></div></td>
+              <td class="td-mono">EMP031</td>
+              <td class="td-mono">—</td>
+              <td>—</td>
+              <td><span class="pill red">Absent</span></td>
+            </tr>
+            <tr>
+              <td><div class="av-row"><div class="avatar" style="background:#06b6d4">SJ</div><span class="td-name">Smita Joshi</span></div></td>
+              <td class="td-mono">EMP055</td>
+              <td class="td-mono">10:04</td>
+              <td>Lab 3</td>
+              <td><span class="pill amber">Late</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- ECR IMAGES -->
+      <div class="card">
+        <div class="card-head">
+          <span class="card-title">ECR Image Tags</span>
+          <span style="font-family:var(--font-mono);font-size:0.72rem;color:var(--muted)">attendance-system</span>
+        </div>
+        <div class="card-body">
+          <div class="ecr-tag">
+            <div>
+              <div class="ecr-tag-name">:42 <span style="color:var(--muted);font-size:0.7rem">(latest)</span></div>
+              <div class="ecr-tag-meta">Pushed 5 mins ago</div>
+            </div>
+            <span class="pill amber"><span class="pulse"></span>Pushing</span>
+          </div>
+          <div class="ecr-tag">
+            <div>
+              <div class="ecr-tag-name">:41</div>
+              <div class="ecr-tag-meta">Pushed 18 mins ago · 187MB</div>
+            </div>
+            <span class="pill green">In Prod</span>
+          </div>
+          <div class="ecr-tag">
+            <div>
+              <div class="ecr-tag-name">:40</div>
+              <div class="ecr-tag-meta">Pushed 1h ago · 183MB</div>
+            </div>
+            <span class="pill green">In Staging</span>
+          </div>
+          <div class="ecr-tag">
+            <div>
+              <div class="ecr-tag-name">:39</div>
+              <div class="ecr-tag-meta">Pushed 2h ago · 183MB</div>
+            </div>
+            <span style="font-family:var(--font-mono);font-size:0.7rem;color:var(--muted)">Idle</span>
+          </div>
+          <div class="ecr-tag">
+            <div>
+              <div class="ecr-tag-name">:38</div>
+              <div class="ecr-tag-meta">Pushed 1d ago · 181MB</div>
+            </div>
+            <span style="font-family:var(--font-mono);font-size:0.7rem;color:var(--muted)">Idle</span>
+          </div>
+          <div style="margin-top:1rem;padding-top:1rem;border-top:1px solid var(--border);">
+            <div style="font-size:0.72rem;color:var(--muted);margin-bottom:0.5rem;font-family:var(--font-mono)">ALB DNS ENDPOINT</div>
+            <div style="background:var(--bg3);border-radius:8px;padding:0.65rem 0.875rem;font-family:var(--font-mono);font-size:0.75rem;color:var(--accent);word-break:break-all;">
+              attendance-alb-xxxxxx.ap-south-1.elb.amazonaws.com
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<!-- NOTIFICATION TOAST -->
+<div class="notif" id="notif">
+  <div class="notif-title" id="notif-title">✓ Check-in Successful</div>
+  <div class="notif-body" id="notif-body">Employee recorded at 09:45 AM</div>
+</div>
+
+<script>
+// Live date
+function updateDate(){
+  const d = new Date();
+  document.getElementById('live-date').textContent =
+    d.toLocaleDateString('en-IN',{weekday:'long',year:'numeric',month:'long',day:'numeric'}) +
+    ' · ' + d.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+}
+setInterval(updateDate, 1000); updateDate();
+
+// Toast
+function showToast(title, body, isErr) {
+  const n = document.getElementById('notif');
+  document.getElementById('notif-title').textContent = title;
+  document.getElementById('notif-body').textContent = body;
+  n.style.borderColor = isErr ? 'var(--danger)' : 'var(--accent)';
+  document.getElementById('notif-title').style.color = isErr ? 'var(--danger)' : 'var(--accent)';
+  n.classList.add('show');
+  setTimeout(() => n.classList.remove('show'), 3500);
+}
+
+// Check-in
+function openCheckin() {
+  document.getElementById('ci-uid').focus();
+}
+
+async function doCheckin() {
+  const uid = document.getElementById('ci-uid').value.trim();
+  const name = document.getElementById('ci-name').value.trim();
+  const loc = document.getElementById('ci-location').value.trim();
+  if (!uid || !name) { showToast('⚠ Missing fields', 'Please fill Employee ID and Name', true); return; }
+
+  const res = document.getElementById('ci-result');
+  res.style.display = 'block';
+  res.innerHTML = '<span style="color:var(--muted);font-size:0.8rem;">Submitting...</span>';
+
+  // Attempt real API call; fall back to mock
+  try {
+    const API = 'http://localhost:8080'; // Change to ALB DNS in production
+    const r = await fetch(API + '/attendance/checkin', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({userId: uid, userName: name, location: loc || 'Main Campus'}),
+      signal: AbortSignal.timeout(3000)
+    });
+    const data = await r.json();
+    res.innerHTML = '<span style="color:var(--accent);font-size:0.8rem;">✓ ID: ' + data.id?.substring(0,8) + '...</span>';
+    showToast('✓ Check-in Recorded', name + ' checked in from ' + (loc || 'Main Campus'));
+  } catch {
+    // Mock success for demo
+    const fakeId = Math.random().toString(36).substring(2,10).toUpperCase();
+    const now = new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'});
+    res.innerHTML = '<span style="color:var(--accent);font-size:0.8rem;">✓ ID: ' + fakeId + ' · ' + now + '</span>';
+
+    // Add to table
+    addTableRow(uid, name, loc || 'Main Campus', now);
+    showToast('✓ Check-in Recorded', name + ' at ' + now + ' · ' + (loc || 'Main Campus'));
+
+    // Update stats
+    const total = parseInt(document.getElementById('stat-total').textContent);
+    const present = parseInt(document.getElementById('stat-present').textContent);
+    document.getElementById('stat-total').textContent = total + 1;
+    document.getElementById('stat-present').textContent = present + 1;
+
+    // Add to activity feed
+    addActivity(name, loc || 'Main Campus');
+
+    document.getElementById('ci-uid').value = '';
+    document.getElementById('ci-name').value = '';
+    document.getElementById('ci-location').value = '';
+  }
+}
+
+function addTableRow(uid, name, loc, time) {
+  const initials = name.split(' ').map(w=>w[0]).join('').substring(0,2).toUpperCase();
+  const colors = ['var(--accent)','#7c3aed','#f59e0b','#06b6d4','#ec4899'];
+  const color = colors[Math.floor(Math.random()*colors.length)];
+  const tbody = document.getElementById('attendance-rows');
+  const tr = document.createElement('tr');
+  tr.innerHTML = `
+    <td><div class="av-row"><div class="avatar" style="background:${color}">${initials}</div><span class="td-name">${name}</span></div></td>
+    <td class="td-mono">${uid.toUpperCase()}</td>
+    <td class="td-mono">${time}</td>
+    <td>${loc}</td>
+    <td><span class="pill green">Present</span></td>
+  `;
+  tbody.prepend(tr);
+}
+
+function addActivity(name, loc) {
+  const feed = document.getElementById('activity-feed');
+  const div = document.createElement('div');
+  div.className = 'activity-item';
+  div.innerHTML = `
+    <div class="act-dot"></div>
+    <div>
+      <div class="act-text"><strong>${name}</strong> checked in from <strong>${loc}</strong></div>
+      <div class="act-time">Just now</div>
+    </div>
+  `;
+  feed.prepend(div);
+}
+
+function refreshStatus() {
+  showToast('↻ Status Refreshed', 'All systems operational · ALB healthy');
+}
+
+// Simulate pipeline progress
+let pipeStage = 3;
+setInterval(() => {
+  if (pipeStage < 5) {
+    pipeStage++;
+    const steps = document.querySelectorAll('.pipe-step');
+    steps[pipeStage-1].classList.remove('running');
+    steps[pipeStage-1].classList.add('done');
+    steps[pipeStage-1].querySelector('.pipe-dot').innerHTML = `
+      <svg width="16" height="16" fill="none" stroke="var(--accent)" viewBox="0 0 24 24" stroke-width="2.5">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5"/>
+      </svg>`;
+    if (pipeStage < 5) {
+      steps[pipeStage].classList.add('running');
+    } else {
+      // Build complete
+      document.querySelector('.card-head .pill.amber').innerHTML = '<span class="pulse"></span>Build #42 Passed';
+      document.querySelector('.card-head .pill.amber').className = 'pill green';
+      document.getElementById('stat-builds').textContent = '42';
+      showToast('✅ Build #42 Complete', 'Image pushed to ECR · Deploying to Production');
+    }
+  }
+}, 4000);
+</script>
+</body>
+</html>
