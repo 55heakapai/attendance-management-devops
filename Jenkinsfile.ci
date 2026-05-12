@@ -16,7 +16,7 @@ pipeline {
         IMAGE_TAG         = "${BUILD_NUMBER}"
 
         // ── Email / Notification ─────────────────────────────
-        NOTIFICATION_EMAIL = "your-email@example.com"
+        NOTIFICATION_EMAIL = "heakapai11@gmail.com"
     }
 
     options {
@@ -30,7 +30,7 @@ pipeline {
         // ── Stage 1: Checkout ──────────────────────────────────
         stage('Checkout') {
             steps {
-                echo "📥 Checking out source code from GitHub..."
+                echo " Checking out source code from GitHub..."
                 checkout scm
                 script {
                     env.GIT_COMMIT_MSG = sh(
@@ -54,7 +54,7 @@ pipeline {
         // ── Stage 2: Test ──────────────────────────────────────
         stage('Test') {
             steps {
-                echo "🧪 Running Maven tests..."
+                echo " Running Maven tests..."
                 sh 'mvn test -B'
             }
             post {
@@ -67,7 +67,7 @@ pipeline {
         // ── Stage 3: Build JAR ─────────────────────────────────
         stage('Build JAR') {
             steps {
-                echo "🔨 Building Spring Boot JAR..."
+                echo " Building Spring Boot JAR..."
                 sh 'mvn clean package -DskipTests -B'
                 archiveArtifacts artifacts: 'target/*.jar', fingerprint: true
             }
@@ -76,7 +76,7 @@ pipeline {
         // ── Stage 4: Docker Build ──────────────────────────────
         stage('Docker Build') {
             steps {
-                echo "🐳 Building Docker image: ${IMAGE_NAME}:${IMAGE_TAG}"
+                echo " Building Docker image: ${IMAGE_NAME}:${IMAGE_TAG}"
                 sh """
                     docker build \
                         --build-arg BUILD_NUMBER=${BUILD_NUMBER} \
@@ -100,7 +100,7 @@ pipeline {
                         secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
                     ]
                 ]) {
-                    echo "🔐 Logging into Amazon ECR..."
+                    echo " Logging into Amazon ECR..."
                     sh """
                         aws ecr get-login-password \
                             --region ${AWS_REGION} | \
@@ -109,11 +109,11 @@ pipeline {
                             --password-stdin ${ECR_REGISTRY}
                     """
 
-                    echo "📤 Pushing image ${IMAGE_NAME}:${IMAGE_TAG} to ECR..."
+                    echo " Pushing image ${IMAGE_NAME}:${IMAGE_TAG} to ECR..."
                     sh "docker push ${IMAGE_NAME}:${IMAGE_TAG}"
                     sh "docker push ${IMAGE_NAME}:latest"
 
-                    echo "🧹 Cleaning up local images..."
+                    echo " Cleaning up local images..."
                     sh "docker rmi ${IMAGE_NAME}:${IMAGE_TAG} || true"
                     sh "docker rmi ${IMAGE_NAME}:latest || true"
                 }
@@ -124,13 +124,13 @@ pipeline {
     // ── Post-build Notifications ───────────────────────────────
     post {
         success {
-            echo "✅ Build #${BUILD_NUMBER} succeeded!"
+            echo " Build #${BUILD_NUMBER} succeeded!"
             emailext(
                 to: "${NOTIFICATION_EMAIL}",
-                subject: "✅ [SUCCESS] Attendance CI Build #${BUILD_NUMBER}",
+                subject: " [SUCCESS] Attendance CI Build #${BUILD_NUMBER}",
                 body: """
                     <html><body style="font-family: Arial, sans-serif;">
-                    <h2 style="color:#27ae60;">✅ Build Successful</h2>
+                    <h2 style="color:#27ae60;"> Build Successful</h2>
                     <table border="1" cellpadding="8" cellspacing="0" style="border-collapse:collapse;">
                         <tr><td><b>Job</b></td><td>${JOB_NAME}</td></tr>
                         <tr><td><b>Build #</b></td><td>${BUILD_NUMBER}</td></tr>
@@ -147,13 +147,13 @@ pipeline {
             )
         }
         failure {
-            echo "❌ Build #${BUILD_NUMBER} failed!"
+            echo " Build #${BUILD_NUMBER} failed!"
             emailext(
                 to: "${NOTIFICATION_EMAIL}",
-                subject: "❌ [FAILED] Attendance CI Build #${BUILD_NUMBER}",
+                subject: " [FAILED] Attendance CI Build #${BUILD_NUMBER}",
                 body: """
                     <html><body style="font-family: Arial, sans-serif;">
-                    <h2 style="color:#e74c3c;">❌ Build Failed</h2>
+                    <h2 style="color:#e74c3c;"> Build Failed</h2>
                     <table border="1" cellpadding="8" cellspacing="0" style="border-collapse:collapse;">
                         <tr><td><b>Job</b></td><td>${JOB_NAME}</td></tr>
                         <tr><td><b>Build #</b></td><td>${BUILD_NUMBER}</td></tr>

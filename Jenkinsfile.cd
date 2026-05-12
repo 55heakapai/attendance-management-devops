@@ -10,12 +10,12 @@ pipeline {
         choice(
             name: 'ENVIRONMENT',
             choices: ['Staging', 'Production'],
-            description: '🌍 Select the target deployment environment'
+            description: ' Select the target deployment environment'
         )
         string(
             name: 'BUILD_NUMBER_TO_DEPLOY',
             defaultValue: '',
-            description: '🔢 Jenkins CI Build Number to deploy (e.g. 42)'
+            description: 'Jenkins CI Build Number to deploy (e.g. 42)'
         )
     }
 
@@ -27,7 +27,7 @@ pipeline {
         IMAGE_NAME        = "${ECR_REGISTRY}/${ECR_REPO_NAME}"
         APP_PORT          = '8080'
         CONTAINER_NAME    = 'attendance-app'
-        NOTIFICATION_EMAIL = "your-email@example.com"
+        NOTIFICATION_EMAIL = "heakapai11@gmail.com"
     }
 
     options {
@@ -54,7 +54,7 @@ pipeline {
                     } else {
                         env.EC2_HOSTS = credentials('ec2-staging-hosts') // "ip1"
                     }
-                    echo "🚀 Deploying image ${env.FULL_IMAGE} to ${env.ENV_UPPER}"
+                    echo " Deploying image ${env.FULL_IMAGE} to ${env.ENV_UPPER}"
                 }
             }
         }
@@ -70,14 +70,14 @@ pipeline {
                         secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
                     ]
                 ]) {
-                    echo "🔍 Verifying image ${FULL_IMAGE} exists in ECR..."
+                    echo " Verifying image ${FULL_IMAGE} exists in ECR..."
                     sh """
                         aws ecr describe-images \
                             --repository-name ${ECR_REPO_NAME} \
                             --image-ids imageTag=${IMAGE_TAG} \
                             --region ${AWS_REGION}
                     """
-                    echo "✅ Image verified in ECR."
+                    echo " Image verified in ECR."
                 }
             }
         }
@@ -133,7 +133,7 @@ pipeline {
                                     ${SSH_USER}@${host.trim()} \
                                     '${deployCmd}'
                             """
-                            echo "✅ Deployment complete on ${host.trim()}"
+                            echo " Deployment complete on ${host.trim()}"
                         }
                     }
                 }
@@ -153,7 +153,7 @@ pipeline {
                     ]) {
                         def hosts = env.EC2_HOSTS.split(',')
                         hosts.each { host ->
-                            echo "❤️ Health checking ${host.trim()}..."
+                            echo " Health checking ${host.trim()}..."
                             def health = sh(
                                 script: """
                                     ssh -i ${SSH_KEY} \
@@ -196,10 +196,10 @@ pipeline {
         failure {
             emailext(
                 to: "${NOTIFICATION_EMAIL}",
-                subject: "❌ [DEPLOY FAILED] Attendance #${IMAGE_TAG} → ${params.ENVIRONMENT}",
+                subject: " [DEPLOY FAILED] Attendance #${IMAGE_TAG} → ${params.ENVIRONMENT}",
                 body: """
                     <html><body style="font-family: Arial, sans-serif;">
-                    <h2 style="color:#e74c3c;">❌ Deployment Failed</h2>
+                    <h2 style="color:#e74c3c;"> Deployment Failed</h2>
                     <table border="1" cellpadding="8" cellspacing="0" style="border-collapse:collapse;">
                         <tr><td><b>Environment</b></td><td>${params.ENVIRONMENT}</td></tr>
                         <tr><td><b>Image Tag</b></td><td>${IMAGE_TAG}</td></tr>
