@@ -1,8 +1,3 @@
-// ============================================================
-//  PHASE 2 — CD Deploy Pipeline (Jenkinsfile.cd)
-//  Parameterized: choose ENVIRONMENT + BUILD_NUMBER
-// ============================================================
-
 pipeline {
     agent any
 
@@ -10,24 +5,26 @@ pipeline {
         choice(
             name: 'ENVIRONMENT',
             choices: ['Staging', 'Production'],
-            description: ' Select the target deployment environment'
+            description: 'Select target environment'
         )
         string(
             name: 'BUILD_NUMBER_TO_DEPLOY',
             defaultValue: '',
-            description: 'Jenkins CI Build Number to deploy (e.g. 42)'
+            description: 'CI Build Number to deploy (e.g. 5)'
         )
     }
 
     environment {
-        AWS_REGION        = 'ap-south-1'
-        AWS_ACCOUNT_ID    = credentials('aws-account-id')
-        ECR_REPO_NAME     = 'attendance-system'
-        ECR_REGISTRY      = "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
-        IMAGE_NAME        = "${ECR_REGISTRY}/${ECR_REPO_NAME}"
-        APP_PORT          = '8080'
-        CONTAINER_NAME    = 'attendance-app'
-        NOTIFICATION_EMAIL = "heakapai11@gmail.com"
+        AWS_REGION         = 'ap-south-1'
+        AWS_ACCOUNT_ID     = credentials('aws-account-id')
+        ECR_REPO_NAME      = 'attendance-system'
+        ECR_REGISTRY       = "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+        IMAGE_NAME         = "${ECR_REGISTRY}/${ECR_REPO_NAME}"
+        APP_PORT           = '8080'
+        CONTAINER_NAME     = 'attendance-app'
+        NOTIFICATION_EMAIL = 'heakapai11@gmail.com'
+        EC2_1_IP           = '65.2.149.30'
+        EC2_2_IP           = '13.201.27.22'
     }
 
     options {
@@ -37,182 +34,159 @@ pipeline {
 
     stages {
 
-        // ── Stage 1: Validate Parameters ──────────────────────
         stage('Validate') {
             steps {
                 script {
                     if (!params.BUILD_NUMBER_TO_DEPLOY?.trim()) {
                         error("BUILD_NUMBER_TO_DEPLOY must be specified!")
                     }
-                    env.IMAGE_TAG       = params.BUILD_NUMBER_TO_DEPLOY
-                    env.FULL_IMAGE      = "${IMAGE_NAME}:${env.IMAGE_TAG}"
-                    env.ENV_UPPER       = params.ENVIRONMENT.toUpperCase()
-
-                    // EC2 target IPs (set per environment)
-                    if (params.ENVIRONMENT == 'Production') {
-                        env.EC2_HOSTS = credentials('ec2-prod-hosts')   // "ip1,ip2"
-                    } else {
-                        env.EC2_HOSTS = credentials('ec2-staging-hosts') // "ip1"
-                    }
-                    echo " Deploying image ${env.FULL_IMAGE} to ${env.ENV_UPPER}"
+                    env.IMAGE_TAG  = params.BUILD_NUMBER_TO_DEPLOY
+                    env.FULL_IMAGE = "${IMAGE_NAME}:${env.IMAGE_TAG}"
+                    echo "Deploying ${env.FULL_IMAGE} to ${params.ENVIRONMENT}"
                 }
             }
         }
 
-        // ── Stage 2: Verify Image Exists in ECR ───────────────
         stage('Verify ECR Image') {
             steps {
-                withCredentials([
-                    [
-                        $class: 'AmazonWebServicesCredentialsBinding',
-                        credentialsId: 'aws-credentials',
-                        accessKeyVariable: 'AWS_ACCESS_KEY_ID',
-                        secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
-                    ]
-                ]) {
-                    echo " Verifying image ${FULL_IMAGE} exists in ECR..."
+                withCredentials([[
+                    $class: 'AmazonWebServicesCredentialsBinding',
+                    credentialsId: 'aws-credentials',
+                    accessKeyVariable: 'AWS_ACCESS_KEY_ID',
+                    secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
+                ]]) {
                     sh """
                         aws ecr describe-images \
                             --repository-name ${ECR_REPO_NAME} \
-                            --image-ids imageTag=${IMAGE_TAG} \
+                            --image-ids imageTag=${env.IMAGE_TAG} \
                             --region ${AWS_REGION}
                     """
-                    echo " Image verified in ECR."
+                    echo "Image verified in ECR."
                 }
             }
         }
 
-        // ── Stage 3: Deploy to EC2 Instances ──────────────────
-        stage('Deploy to EC2') {
+        stage('Deploy to Staging') {
+            when {
+                expression { params.ENVIRONMENT == 'Staging' }
+            }
             steps {
                 withCredentials([
-                    [
-                        $class: 'AmazonWebServicesCredentialsBinding',
-                        credentialsId: 'aws-credentials',
-                        accessKeyVariable: 'AWS_ACCESS_KEY_ID',
-                        secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
-                    ],
                     sshUserPrivateKey(
                         credentialsId: 'ec2-ssh-key',
                         keyFileVariable: 'SSH_KEY',
                         usernameVariable: 'SSH_USER'
-                    )
+                    ),
+                    [$class: 'AmazonWebServicesCredentialsBinding',
+                     credentialsId: 'aws-credentials',
+                     accessKeyVariable: 'AWS_ACCESS_KEY_ID',
+                     secretKeyVariable: 'AWS_SECRET_ACCESS_KEY']
                 ]) {
-                    script {
-                        def hosts = env.EC2_HOSTS.split(',')
-
-                        // ECR login command — re-used on each host
-                        def ecrLoginCmd = """
-                            aws ecr get-login-password \
-                                --region ${AWS_REGION} | \
-                            docker login \
-                                --username AWS \
-                                --password-stdin ${ECR_REGISTRY}
-                        """
-
-                        def deployCmd = """
-                            ${ecrLoginCmd}
-                            docker pull ${FULL_IMAGE}
-                            docker stop ${CONTAINER_NAME} 2>/dev/null || true
-                            docker rm   ${CONTAINER_NAME} 2>/dev/null || true
-                            docker run -d \
-                                --name ${CONTAINER_NAME} \
-                                --restart unless-stopped \
-                                -p ${APP_PORT}:${APP_PORT} \
-                                -e SPRING_PROFILES_ACTIVE=${params.ENVIRONMENT.toLowerCase()} \
-                                ${FULL_IMAGE}
-                            sleep 10
-                            docker ps --filter name=${CONTAINER_NAME} --format '{{.Status}}'
-                        """
-
-                        hosts.each { host ->
-                            echo "📡 Deploying to ${host.trim()} (${ENV_UPPER})..."
-                            sh """
-                                ssh -i ${SSH_KEY} \
-                                    -o StrictHostKeyChecking=no \
-                                    ${SSH_USER}@${host.trim()} \
-                                    '${deployCmd}'
-                            """
-                            echo " Deployment complete on ${host.trim()}"
-                        }
-                    }
+                    sh """
+                        ssh -i \$SSH_KEY -o StrictHostKeyChecking=no ec2-user@${EC2_1_IP} bash << EOF
+aws configure set aws_access_key_id \$AWS_ACCESS_KEY_ID
+aws configure set aws_secret_access_key \$AWS_SECRET_ACCESS_KEY
+aws configure set default.region ${AWS_REGION}
+aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${ECR_REGISTRY}
+docker pull ${env.FULL_IMAGE}
+docker stop ${CONTAINER_NAME} || true
+docker rm ${CONTAINER_NAME} || true
+docker run -d --name ${CONTAINER_NAME} --restart unless-stopped -p ${APP_PORT}:${APP_PORT} ${env.FULL_IMAGE}
+sleep 5
+docker ps
+EOF
+                    """
                 }
             }
         }
 
-        // ── Stage 4: Health Check ──────────────────────────────
+        stage('Deploy to Production') {
+            when {
+                expression { params.ENVIRONMENT == 'Production' }
+            }
+            steps {
+                withCredentials([
+                    sshUserPrivateKey(
+                        credentialsId: 'ec2-ssh-key',
+                        keyFileVariable: 'SSH_KEY',
+                        usernameVariable: 'SSH_USER'
+                    ),
+                    [$class: 'AmazonWebServicesCredentialsBinding',
+                     credentialsId: 'aws-credentials',
+                     accessKeyVariable: 'AWS_ACCESS_KEY_ID',
+                     secretKeyVariable: 'AWS_SECRET_ACCESS_KEY']
+                ]) {
+                    echo "Deploying to EC2-1: ${EC2_1_IP}"
+                    sh """
+                        ssh -i \$SSH_KEY -o StrictHostKeyChecking=no ec2-user@${EC2_1_IP} bash << EOF
+aws configure set aws_access_key_id \$AWS_ACCESS_KEY_ID
+aws configure set aws_secret_access_key \$AWS_SECRET_ACCESS_KEY
+aws configure set default.region ${AWS_REGION}
+aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${ECR_REGISTRY}
+docker pull ${env.FULL_IMAGE}
+docker stop ${CONTAINER_NAME} || true
+docker rm ${CONTAINER_NAME} || true
+docker run -d --name ${CONTAINER_NAME} --restart unless-stopped -p ${APP_PORT}:${APP_PORT} ${env.FULL_IMAGE}
+sleep 5
+docker ps
+EOF
+                    """
+                    echo "Deploying to EC2-2: ${EC2_2_IP}"
+                    sh """
+                        ssh -i \$SSH_KEY -o StrictHostKeyChecking=no ec2-user@${EC2_2_IP} bash << EOF
+aws configure set aws_access_key_id \$AWS_ACCESS_KEY_ID
+aws configure set aws_secret_access_key \$AWS_SECRET_ACCESS_KEY
+aws configure set default.region ${AWS_REGION}
+aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${ECR_REGISTRY}
+docker pull ${env.FULL_IMAGE}
+docker stop ${CONTAINER_NAME} || true
+docker rm ${CONTAINER_NAME} || true
+docker run -d --name ${CONTAINER_NAME} --restart unless-stopped -p ${APP_PORT}:${APP_PORT} ${env.FULL_IMAGE}
+sleep 5
+docker ps
+EOF
+                    """
+                }
+            }
+        }
+
         stage('Health Check') {
             steps {
                 script {
-                    withCredentials([
-                        sshUserPrivateKey(
-                            credentialsId: 'ec2-ssh-key',
-                            keyFileVariable: 'SSH_KEY',
-                            usernameVariable: 'SSH_USER'
-                        )
-                    ]) {
-                        def hosts = env.EC2_HOSTS.split(',')
-                        hosts.each { host ->
-                            echo " Health checking ${host.trim()}..."
-                            def health = sh(
-                                script: """
-                                    ssh -i ${SSH_KEY} \
-                                        -o StrictHostKeyChecking=no \
-                                        ${SSH_USER}@${host.trim()} \
-                                        'curl -sf http://localhost:${APP_PORT}/attendance/status'
-                                """,
-                                returnStdout: true
-                            ).trim()
-                            echo "Health response: ${health}"
-                        }
-                    }
+                    sleep 10
+                    sh "curl -sf http://${EC2_1_IP}:${APP_PORT}/attendance/status || echo 'Health check failed'"
                 }
             }
         }
     }
 
-    // ── Post-Deploy Notifications ──────────────────────────────
     post {
         success {
             emailext(
                 to: "${NOTIFICATION_EMAIL}",
-                subject: "✅ [DEPLOYED] Attendance #${IMAGE_TAG} → ${params.ENVIRONMENT}",
-                body: """
-                    <html><body style="font-family: Arial, sans-serif;">
-                    <h2 style="color:#27ae60;">✅ Deployment Successful</h2>
-                    <table border="1" cellpadding="8" cellspacing="0" style="border-collapse:collapse;">
-                        <tr><td><b>Environment</b></td><td>${params.ENVIRONMENT}</td></tr>
-                        <tr><td><b>Image Tag</b></td><td>${IMAGE_TAG}</td></tr>
-                        <tr><td><b>Full Image</b></td><td>${FULL_IMAGE}</td></tr>
-                        <tr><td><b>Deploy Job #</b></td><td>${BUILD_NUMBER}</td></tr>
-                        <tr><td><b>Duration</b></td><td>${currentBuild.durationString}</td></tr>
-                    </table>
-                    <p><a href="${BUILD_URL}">View Deploy Logs →</a></p>
-                    </body></html>
-                """,
+                subject: "DEPLOYED: Attendance #${env.IMAGE_TAG} to ${params.ENVIRONMENT}",
+                body: """<html><body>
+                    <h2 style='color:green'>Deployment Successful!</h2>
+                    <p><b>Environment:</b> ${params.ENVIRONMENT}</p>
+                    <p><b>Image:</b> ${env.FULL_IMAGE}</p>
+                    <p><b>App URL:</b> http://${EC2_1_IP}:8080/attendance/status</p>
+                    <a href='${BUILD_URL}'>View Logs</a>
+                    </body></html>""",
                 mimeType: 'text/html'
             )
         }
         failure {
             emailext(
                 to: "${NOTIFICATION_EMAIL}",
-                subject: " [DEPLOY FAILED] Attendance #${IMAGE_TAG} → ${params.ENVIRONMENT}",
-                body: """
-                    <html><body style="font-family: Arial, sans-serif;">
-                    <h2 style="color:#e74c3c;"> Deployment Failed</h2>
-                    <table border="1" cellpadding="8" cellspacing="0" style="border-collapse:collapse;">
-                        <tr><td><b>Environment</b></td><td>${params.ENVIRONMENT}</td></tr>
-                        <tr><td><b>Image Tag</b></td><td>${IMAGE_TAG}</td></tr>
-                        <tr><td><b>Deploy Job #</b></td><td>${BUILD_NUMBER}</td></tr>
-                    </table>
-                    <p><a href="${BUILD_URL}console">View Console →</a></p>
-                    </body></html>
-                """,
+                subject: "DEPLOY FAILED: Attendance to ${params.ENVIRONMENT}",
+                body: """<html><body>
+                    <h2 style='color:red'>Deployment Failed!</h2>
+                    <p><b>Environment:</b> ${params.ENVIRONMENT}</p>
+                    <a href='${BUILD_URL}console'>View Error</a>
+                    </body></html>""",
                 mimeType: 'text/html'
             )
         }
-        always {
-            cleanWs()
-        }
+        always { cleanWs() }
     }
 }
