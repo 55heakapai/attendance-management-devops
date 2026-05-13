@@ -1,0 +1,22 @@
+# Maven
+target/
+*.jar
+*.war
+*.class
+
+# IntelliJ
+.idea/
+*.iml
+*.iws
+*.ipr
+
+# AWS — NEVER commit these
+*.pem
+.aws/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
