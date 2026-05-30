@@ -14,8 +14,13 @@ Continuous Deployment (CD)
 Version control using Git/GitHub
 ## Technologies Used
 Frontend: HTML, CSS, JavaScript
+
 Backend: Java/Python/PHP (update as per your project)
+
 Database: MySQL
+
 Version Control: Git & GitHub
+
 CI/CD Tool: Jenkins
+
 Build Tool: Maven
